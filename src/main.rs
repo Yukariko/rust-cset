@@ -12,6 +12,19 @@ pub fn app() -> Command {
         )
 }
 
+fn do_proc(matches : &ArgMatches) {
+    println!("proc");
+}
+
+fn do_set(matches : &ArgMatches) {
+    println!("set");
+}
+
 fn main() {
     let matches = app().get_matches();
+    match matches.subcommand() {
+        Some(("proc", sub_matches)) => do_proc(sub_matches),
+        Some(("set", sub_matches)) => do_set(sub_matches),
+        _ => println!("none"),
+    }
 }
