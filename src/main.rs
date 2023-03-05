@@ -15,6 +15,7 @@ pub fn app() -> Command {
             Command::new("set")
                 .arg(arg!(-l --list "list"))
                 .arg(arg!(-r --recursive "recursive"))
+                .arg(arg!(-c --cpu <mask> "sets a cpumask"))
         )
 }
 
@@ -56,6 +57,10 @@ fn do_set(matches : &ArgMatches) -> io::Result<()> {
         println!("list");
         enter_dirs("/", &|e| println!("{:?}", e), matches.get_flag("recursive"));
         return Ok(())
+    }
+
+    if let Some(mask) = matches.get_one::<String>("cpu") {
+        println!("cpumask : {}", mask);
     }
     Ok(())
 }
