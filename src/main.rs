@@ -13,7 +13,7 @@ pub fn app() -> Command {
         )
         .subcommand(
             Command::new("set")
-                .arg(arg!(-l --list "list"))
+                .arg(arg!(-l --list [path] "list").default_value("/"))
                 .arg(arg!(-r --recursive "recursive"))
                 .arg(arg!(-c --cpu <mask> "sets a cpumask"))
         )
@@ -40,7 +40,7 @@ fn enter_dirs(path : &str, cb : &dyn Fn(&DirEntry), recursive : bool) -> io::Res
         if path.is_dir() {
             cb(&dir);
             if recursive {
-                visit_dirs(&path, cb);
+                visit_dirs(&path, cb)?;
             }
         }
     }
@@ -53,10 +53,12 @@ fn do_proc(matches : &ArgMatches) -> io::Result<()> {
 }
 
 fn do_set(matches : &ArgMatches) -> io::Result<()> {
-    if matches.get_flag("list") {
-        println!("list");
-        enter_dirs("/", &|e| println!("{:?}", e), matches.get_flag("recursive"));
-        return Ok(())
+    if matches.contains_id("list") {
+        let mut list = "/";
+        if let Some(arg) = matches.get_one::<String>("list") {
+            list = arg;
+        }
+        return enter_dirs(list, &|e| println!("{:?}", e.path()), matches.get_flag("recursive"));
     }
 
     if let Some(mask) = matches.get_one::<String>("cpu") {
