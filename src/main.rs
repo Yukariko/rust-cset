@@ -1,9 +1,15 @@
-use std::io;
+use std::io::{self, Write};
 use clap::{Arg, ArgAction, ArgMatches, Command, arg};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const CSET_PATH: &str = "/sys/fs/cgroup/cpuset";
+
+struct Procedure<'a> {
+    pre_cb : &'a dyn Fn(&Path),
+    post_cb : &'a dyn Fn(&Path),
+    recursive : bool,
+}
 
 pub fn app() -> Command {
     Command::new("cset")
@@ -13,39 +19,44 @@ pub fn app() -> Command {
         )
         .subcommand(
             Command::new("set")
-                .arg(arg!(-l --list [path] "list").default_value("/"))
+                .arg(arg!([path] "path").default_value("/"))
+                .arg(arg!(-l --list "list"))
                 .arg(arg!(-r --recursive "recursive"))
                 .arg(arg!(-c --cpu <mask> "sets a cpumask"))
         )
 }
 
-fn visit_dirs(dir: &Path, cb: &dyn Fn(&Path)) -> io::Result<()> {
+fn visit_dirs(dir: &Path, proc : &Procedure) -> io::Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            cb(&path);
-            visit_dirs(&path, cb)?;
+            (proc.pre_cb)(&path);
+            visit_dirs(&path, &proc)?;
+            (proc.post_cb)(&path);
         }
     }
     Ok(())
 }
 
-fn enter_dirs(path : &str, cb : &dyn Fn(&Path), recursive : bool) -> io::Result<()> {
+fn enter_dirs(path : &str, proc : &Procedure) -> io::Result<()> {
     let path = CSET_PATH.to_owned() + path;
     let path = PathBuf::from(path);
-    cb(&path);
-    for dir in fs::read_dir(path)? {
+
+    (proc.pre_cb)(&path);
+    for dir in fs::read_dir(&path)? {
         let dir = dir?;
         let path = dir.path();
 
         if path.is_dir() {
-            cb(&path);
-            if recursive {
-                visit_dirs(&path, cb)?;
+            (proc.pre_cb)(&path);
+            if proc.recursive {
+                visit_dirs(&path, &proc)?;
             }
+            (proc.post_cb)(&path);
         }
     }
+    (proc.post_cb)(&path);
     Ok(())
 }
 
@@ -57,22 +68,48 @@ fn print_cpuset(entry : &Path) {
     }
 }
 
+fn empty_function(entry : &Path) {
+
+}
+
+fn set_cpuset(entry : &Path, mask : &str) {
+    let path = entry.to_str().unwrap().to_owned() + "/cpuset";
+    match fs::File::options().write(true).truncate(true).open(path) {
+        Ok(mut f) => {
+            f.write_all(mask.as_bytes());
+            println!("{:?} {}", entry, mask)
+        },
+        Err(_) => (),
+    }
+}
+
 fn do_proc(matches : &ArgMatches) -> io::Result<()> {
     println!("proc");
     Ok(())
 }
 
 fn do_set(matches : &ArgMatches) -> io::Result<()> {
-    if matches.contains_id("list") {
-        let mut list = "/";
-        if let Some(arg) = matches.get_one::<String>("list") {
-            list = arg;
-        }
-        return enter_dirs(list, &print_cpuset, matches.get_flag("recursive"));
+    let mut path = "/";
+    if let Some(arg) = matches.get_one::<String>("path") {
+        path = arg;
+    }
+
+    if matches.get_flag("list") {
+        let proc = Procedure {
+            pre_cb : &print_cpuset,
+            post_cb : &empty_function,
+            recursive : matches.get_flag("recursive"),
+        };
+        return enter_dirs(path, &proc);
     }
 
     if let Some(mask) = matches.get_one::<String>("cpu") {
-        println!("cpumask : {}", mask);
+        let proc = Procedure {
+            pre_cb : &empty_function,
+            post_cb : &|entry : &Path| { set_cpuset(&entry, mask); },
+            recursive : matches.get_flag("recursive"),
+        };
+        return enter_dirs(path, &proc);
     }
     Ok(())
 }
