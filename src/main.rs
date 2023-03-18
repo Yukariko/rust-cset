@@ -22,7 +22,8 @@ pub fn app() -> Command {
                 .arg(arg!([path] "path").default_value("/"))
                 .arg(arg!(-l --list "list"))
                 .arg(arg!(-r --recursive "recursive"))
-                .arg(arg!(-c --cpu <mask> "sets a cpumask"))
+                .arg(arg!(-c --cpu <mask> "set cpumask"))
+                .arg(arg!(-d --destroy "destroy cpusets"))
         )
 }
 
@@ -83,6 +84,13 @@ fn set_cpuset(entry : &Path, mask : &str) {
     }
 }
 
+fn destroy_cpuset(entry : &Path) {
+    match fs::remove_dir(entry.to_str().unwrap()) {
+        Ok(_) => (),
+        Err(err) => println!("{:?}: {}", entry, err),
+    }
+}
+
 fn do_proc(matches : &ArgMatches) -> io::Result<()> {
     println!("proc");
     Ok(())
@@ -111,6 +119,17 @@ fn do_set(matches : &ArgMatches) -> io::Result<()> {
         };
         return enter_dirs(path, &proc);
     }
+
+    if matches.get_flag("destroy") {
+        let proc = Procedure {
+            pre_cb : &empty_function,
+            post_cb : &destroy_cpuset,
+            recursive : matches.get_flag("recursive"),
+        };
+        return enter_dirs(path, &proc);
+    }
+
+
     Ok(())
 }
 
