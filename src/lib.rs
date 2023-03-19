@@ -33,11 +33,9 @@ pub mod cpuset {
             let dir = dir?;
             let path = dir.path();
 
-            if path.is_dir() {
+            if proc.recursive && path.is_dir() {
                 (proc.pre_cb)(&path);
-                if proc.recursive {
-                    visit_dirs(&path, &proc)?;
-                }
+                visit_dirs(&path, &proc)?;
                 (proc.post_cb)(&path);
             }
         }
@@ -62,7 +60,18 @@ pub mod cpuset {
                     Err(err) => println!("{:?} {}", entry, err),
                 }
             },
-            Err(_) => (),
+            Err(err) => println!("{:?} {}", entry, err),
+        }
+    }
+
+    pub fn create_cpuset(entry : &Path, name : &str) -> bool {
+        let path = entry.to_str().unwrap().to_owned() + "/" + name;
+        match fs::create_dir(path) {
+            Ok(_) => true,
+            Err(err) => {
+                println!("{:?}: {}", entry, err);
+                false
+            },
         }
     }
 

@@ -1,6 +1,6 @@
 use std::io;
 use clap::{Arg, ArgAction, ArgMatches, Command, arg};
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use rust_cset::cpuset::*;
 
 pub fn app() -> Command {
@@ -16,6 +16,7 @@ pub fn app() -> Command {
                 .arg(arg!(-r --recursive "recursive"))
                 .arg(arg!(-c --cpu <mask> "set cpumask"))
                 .arg(arg!(-d --destroy "destroy cpusets"))
+                .arg(arg!(-n --new <name> "create new cpuset"))
         )
 }
 
@@ -37,6 +38,25 @@ fn do_set(matches : &ArgMatches) -> io::Result<()> {
             pre_cb : &print_cpuset,
             post_cb : &empty,
             recursive : matches.get_flag("recursive"),
+        };
+        return enter_dirs(path, &proc);
+    }
+
+    if let Some(name) = matches.get_one::<String>("new") {
+        let mut cpuset = "";
+        if let Some(mask) = matches.get_one::<String>("cpu") {
+            cpuset = mask;
+        }
+        let proc = Procedure {
+            pre_cb : &|entry : &Path| {
+                if create_cpuset(&entry, name) && cpuset != "" {
+                    let path = entry.to_str().unwrap().to_owned() + "/" + name;
+                    let path = PathBuf::from(path);
+                    set_cpuset(&path, cpuset);
+                }
+            },
+            post_cb : &empty,
+            recursive : false,
         };
         return enter_dirs(path, &proc);
     }
